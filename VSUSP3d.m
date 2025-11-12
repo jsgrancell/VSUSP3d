@@ -1,5 +1,5 @@
 function VSUSP3d(carParams, maxDroop, maxJounce, maxLeft, maxRight)
-    increment = 0.1;                                                       % Increment of travel from 0 to maximum values
+    increment = 0.05;                                                      % Increment of travel from 0 to maximum values
     midBump = round(abs(maxDroop)/increment+1);                            % Middle index of bump
     midSteer = round(abs(maxLeft)/increment+1);                            % Middle index of steer
 
@@ -289,4 +289,5 @@ function [coordsNew, params, tire] = solveSteer(coordsOld, lengths, steer)
 
     [tire(:,1:3), tire(:,7:9)] = findTire(coordsNew(4,:), coordsNew(5,:), params(1), -params(2),8);
     [tire(:,4:6), tire(:,10:12)] = findTire(coordsNew(4,:), coordsNew(5,:), params(1), -params(2),5);
+
 end
