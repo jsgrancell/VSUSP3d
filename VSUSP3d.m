@@ -1,15 +1,17 @@
 function VSUSP3d(carParams, maxDroop, maxJounce, maxLeft, maxRight)
-    increment = 0.01;
+    increment = 0.1;                                                       % Increment of travel from 0 to maximum values
+    midBump = round(abs(maxDroop)/increment+1);                            % Middle index of bump
+    midSteer = round(abs(maxLeft)/increment+1);                            % Middle index of steer
 
-    inboard = carParams.inboardF([1:4,6],:);
-    outboard = carParams.outboardF([1:4,6],:);
-    tireOutboard = carParams.tireOutboardF;
-    tireInboard = carParams.tireInboardF;
-    tireContactPt = carParams.tireContactPtF(1,:);
+    inboard = carParams.inboardF([1:4,6],:);                               % Defines beginning inboard coordinates
+    outboard = carParams.outboardF([1:4,6],:);                             % Defines beginning outboard coordinates
+    tireOutboard = carParams.tireOutboardF;                                % Defines beginning outer point of tire normal vector
+    tireInboard = carParams.tireInboardF;                                  % Defines beginning outer point of tire normal vector
+    tireContactPt = carParams.tireContactPtF(1,:);                         % Defines beginning tire contact point
     lengths = zeros(1,13);
-    lengths(1) = norm(outboard(3,[2,3])-inboard(3,[2,3]));
+    lengths(1) = norm(outboard(3,[2,3])-inboard(3,[2,3]));                 % Defines known lengths between different points
     lengths(2) = norm(outboard(1,:)-inboard(1,:));
-    lengths(3) = norm(outboard(2,:)-inboard(2,:));
+    lengths(3) = norm(outboard(1,:)-inboard(2,:));
     lengths(4) = norm(outboard(5,:)-inboard(5,:));
     lengths(5) = norm(outboard(1,:)-outboard(3,:));
     lengths(6) = norm(outboard(1,:)-outboard(5,:));
@@ -24,73 +26,73 @@ function VSUSP3d(carParams, maxDroop, maxJounce, maxLeft, maxRight)
     lengths(15) = norm(tireContactPt-tireOutboard);
     lengths(16) = norm(tireContactPt-outboard(5,:));
 
-    params = zeros(6,round(1+(maxJounce-maxDroop)/increment),round(1+(maxRight-maxLeft)/increment));
-    coords = zeros(7,3,round(1+(maxJounce-maxDroop)/increment),round(1+(maxRight-maxLeft)/increment));
-    tire = zeros(101,12,round(1+(maxJounce-maxDroop))/increment,round(1+(maxRight-maxLeft)/increment));
+    params = zeros(6,round(1+(maxJounce-maxDroop)/increment),round(1+(maxRight-maxLeft)/increment));    % Creates array to store parameters (toe, camber, caster etc.)
+    coords = zeros(7,3,round(1+(maxJounce-maxDroop)/increment),round(1+(maxRight-maxLeft)/increment));  % Creates array to store suspension coordinates
+    tire = zeros(101,12,round(1+(maxJounce-maxDroop))/increment,round(1+(maxRight-maxLeft)/increment)); % Creates array to store tire coordinates
     
-    coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];
+    coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];  % Places starting coordinates in easier to call variable
 
-    [coords(:,:,abs(maxDroop)/increment+1, abs(maxLeft)/increment+1), params(2:6,abs(maxDroop)/increment+1,abs(maxLeft)/increment+1), tire(:,:,abs(maxDroop)/increment+1, abs(maxLeft)/increment+1)] = solveBump(coordsNew, inboard, lengths, 0);
+    [coords(:,:,midBump,midSteer), params(2:6,midBump,midSteer), tire(:,:,midBump,midSteer)] = solveBump(coordsNew, inboard, lengths, 0);   % Finds parameters at static
 
-    for i = abs(maxLeft)/increment:-1:1
-        [coordsNew, params(2:6,abs(maxDroop)/increment+1,i), tire(:,:,abs(maxDroop)/increment+1,i)] = solveSteer(coordsNew, lengths, -increment);
-        coords(:,:,abs(maxDroop)/increment+1,i) = coordsNew;
+    for i = midSteer-1:-1:1                                                                                     % Works from zero to max right steer
+        [coordsNew, params(2:6,midBump,i), tire(:,:,midBump,i)] = solveSteer(coordsNew, lengths, -increment);   % Finds parameters at steer value
+        coords(:,:,midBump,i) = coordsNew;
     end
 
-    coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];
+    coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];  % Resets starting point
 
-    for i = 2+(abs(maxRight))/increment:size(coords,4)
-        [coordsNew, params(2:6,abs(maxDroop)/increment+1,i), tire(:,:,abs(maxDroop)/increment+1,i)] = solveSteer(coordsNew, lengths, increment);
-        coords(:,:,abs(maxDroop)/increment+1,i) = coordsNew;
+    for i = midSteer+1:size(coords,4)                                                                           % Works from zero to max left steer
+        [coordsNew, params(2:6,midBump,i), tire(:,:,midBump,i)] = solveSteer(coordsNew, lengths, increment);    % Finds parameters at steer value
+        coords(:,:,midBump,i) = coordsNew;
     end
     
-    coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];
+    coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];  % Resets starting point
 
-    for i = abs(maxDroop)/increment:-1:1
-        [coordsNew, params(2:6,i,abs(maxLeft)/increment+1), tire(:,:,i,abs(maxLeft)/increment+1)] = solveBump(coordsNew, inboard, lengths, -increment);
-        coords(:,:,i, abs(maxLeft)/increment+1) = coordsNew;
-        params(1,i,:) = (abs(maxDroop)/increment-i+1)*-increment;
+    for i = midBump-1:-1:1
+        [coordsNew, params(2:6,i,midSteer), tire(:,:,i,midSteer)] = solveBump(coordsNew, inboard, lengths, -increment);
+        coords(:,:,i,midSteer) = coordsNew;
+        params(1,i,:) = (midBump-i)*-increment;
 
-        for j = abs(maxLeft)/increment:-1:1
+        for j = midSteer-1:-1:1
             [coordsNew, params(2:6,i,j), tire(:,:,i,j)] = solveSteer(coordsNew, lengths, -increment);
             coords(:,:,i,j) = coordsNew;
         end
 
-        coordsNew(:,:) = coords(:,:,i, abs(maxLeft)/increment+1);
+        coordsNew(:,:) = coords(:,:,i,midSteer);
 
-        for j = 2+(abs(maxRight))/increment:size(coords,4)
+        for j = midSteer+1:size(coords,4)
             [coordsNew, params(2:6,i,j), tire(:,:,i,j)] = solveSteer(coordsNew, lengths, increment);
             coords(:,:,i,j) = coordsNew;
         end
         
-        coordsNew(:,:) = coords(:,:,i, abs(maxLeft)/increment+1);
+        coordsNew(:,:) = coords(:,:,i,midSteer);
     end
     
     coordsNew = [outboard(1,:); outboard(3,:); outboard(5,:); tireInboard; tireOutboard; tireContactPt; inboard(5,:)];
     
-    for i = 2+(abs(maxDroop))/increment:size(coords,3)
-        [coordsNew, params(2:6,i,abs(maxLeft)/increment+1), tire(:,:,i,abs(maxLeft)/increment+1)] = solveBump(coordsNew, inboard, lengths, increment);
-        coords(:,:,i, abs(maxLeft)/increment+1) = coordsNew;
-        params(1,i,:) = (i-1-abs(maxDroop)/increment)*increment;
+    for i = midBump+1:size(coords,3)
+        [coordsNew, params(2:6,i,midSteer), tire(:,:,i,midSteer)] = solveBump(coordsNew, inboard, lengths, increment);
+        coords(:,:,i,midSteer) = coordsNew;
+        params(1,i,:) = (i-midBump)*increment;
         
-        for j = abs(maxLeft)/increment:-1:1
+        for j = midSteer-1:-1:1
             [coordsNew, params(2:6,i,j), tire(:,:,i,j)] = solveSteer(coordsNew, lengths, -increment);
             coords(:,:,i,j) = coordsNew;
         end
 
-        coordsNew(:,:) = coords(:,:,i, abs(maxLeft)/increment+1);
+        coordsNew(:,:) = coords(:,:,i,midSteer);
 
-        for j = 2+(abs(maxRight))/increment:size(coords,4)
+        for j = midSteer+1:size(coords,4)
             [coordsNew, params(2:6,i,j), tire(:,:,i,j)] = solveSteer(coordsNew, lengths, increment);
             coords(:,:,i,j) = coordsNew;
         end
         
-        coordsNew(:,:) = coords(:,:,i, abs(maxLeft)/increment+1);
+        coordsNew(:,:) = coords(:,:,i,midSteer);
     end
 
     for i = 1:size(coords, 3)
-        for j = 1:size(coords,4)
-            % j = i;
+        for j = size(coords,4):-1:1
+            % j = 1+size(coords, 3)-i;
             coordsNew(:,:) = coords(:,:,i,j);
             clf
             hold on
@@ -123,54 +125,53 @@ function VSUSP3d(carParams, maxDroop, maxJounce, maxLeft, maxRight)
             hold off
         end
     end
-    
+
     subplot(2,3,1);
-    plot(params(1,:,abs(maxLeft)/increment+1), params(2,:,abs(maxLeft)/increment+1), 'LineWidth', 2)
+    plot(params(1,:,midSteer), params(2,:,midSteer), 'LineWidth', 2)
     grid on
-    xlabel('Front Left Bump (in)', 'FontSize', 15)
-    ylabel('Front Left Toe (degrees)', 'FontSize', 15)
+    xlabel('Front Left Bump (in)', 'FontSize', 12)
+    ylabel('Front Left Toe (degrees)', 'FontSize', 12)
     title('Toe vs. Bump', 'FontSize', 20)
-    xlim([params(1,1,abs(maxLeft)/increment+1),params(1,size(params,2),abs(maxLeft)/increment+1)])
-    % ylim([floor(params(2,1,abs(maxLeft)/increment+1)*10)/10,ceil(params(2,size(params,2),abs(maxLeft)/increment+1)*10)/10])
+    xlim([params(1,1,midSteer),params(1,size(params,2),midSteer)])
+    % ylim([floor(params(2,1,midSteer)*10)/10,ceil(params(2,size(params,2),midSteer)*10)/10])
     subplot(2,3,2);
-    plot(params(1,:,abs(maxLeft)/increment+1), params(3,:,abs(maxLeft)/increment+1), 'LineWidth', 2)
+    plot(params(1,:,midSteer), params(3,:,midSteer), 'LineWidth', 2)
     grid on
-    xlabel('Front Left Bump (in)', 'FontSize', 15)
-    ylabel('Front Left Camber (degrees)', 'FontSize', 15)
+    xlabel('Front Left Bump (in)', 'FontSize', 12)
+    ylabel('Front Left Camber (degrees)', 'FontSize', 12)
     title('Camber vs. Bump', 'FontSize', 20)
-    xlim([params(1,1,abs(maxLeft)/increment+1),params(1,size(params,2),abs(maxLeft)/increment+1)])
-    ylim([floor(params(3,size(params,2),abs(maxLeft)/increment+1)*10)/10,ceil(params(3,1,abs(maxLeft)/increment+1)*10)/10])
+    xlim([params(1,1,midSteer),params(1,size(params,2),midSteer)])
+    ylim([floor(params(3,size(params,2),midSteer)*10)/10,ceil(params(3,1,midSteer)*10)/10])
     subplot(2,3,4);
-    plot(params(1,:,abs(maxLeft)/increment+1), params(4,:,abs(maxLeft)/increment+1), 'LineWidth', 2)
+    plot(params(1,:,midSteer), params(4,:,midSteer), 'LineWidth', 2)
     grid on
-    xlabel('Front Left Bump (in)', 'FontSize', 15)
-    ylabel('Front Left Caster (degrees)', 'FontSize', 15)
+    xlabel('Front Left Bump (in)', 'FontSize', 12)
+    ylabel('Front Left Caster (degrees)', 'FontSize', 12)
     title('Caster vs. Bump', 'FontSize', 20)
-    xlim([params(1,1,abs(maxLeft)/increment+1),params(1,size(params,2),abs(maxLeft)/increment+1)])
-    ylim([floor(params(4,1,abs(maxLeft)/increment+1)*10)/10,ceil(params(4,size(params,2),abs(maxLeft)/increment+1)*10)/10])
+    xlim([params(1,1,midSteer),params(1,size(params,2),midSteer)])
+    ylim([floor(params(4,1,midSteer)*10)/10,ceil(params(4,size(params,2),midSteer)*10)/10])
     subplot(2,3,5);
-    plot(params(1,:,abs(maxLeft)/increment+1), params(5,:,abs(maxLeft)/increment+1), 'LineWidth', 2)
+    plot(params(1,:,midSteer), params(5,:,midSteer), 'LineWidth', 2)
     grid on
-    xlabel('Front Left Bump (in)', 'FontSize', 15)
-    ylabel('Front Left Mechanical Trail (in)', 'FontSize', 15)
+    xlabel('Front Left Bump (in)', 'FontSize', 12)
+    ylabel('Front Left Mechanical Trail (in)', 'FontSize', 12)
     title('Mechanical Trail vs. Bump', 'FontSize', 20)
-    xlim([params(1,1,abs(maxLeft)/increment+1),params(1,size(params,2),abs(maxLeft)/increment+1)])
-    ylim([floor(params(5,1,abs(maxLeft)/increment+1)*10)/10,ceil(params(5,size(params,2),abs(maxLeft)/increment+1)*10)/10])
+    xlim([params(1,1,midSteer),params(1,size(params,2),midSteer)])
+    ylim([floor(params(5,1,midSteer)*10)/10,ceil(params(5,size(params,2),midSteer)*10)/10])
     subplot(2,3,3)
-    plot(squeeze(params(2,abs(maxDroop)/increment+1,:)),squeeze(params(3,abs(maxDroop)/increment+1,:)), 'LineWidth', 2)
+    plot(squeeze(params(2,midBump,:)),squeeze(params(3,midBump,:)), 'LineWidth', 2)
     grid on
-    xlabel('Front Left Steer Angle (degrees)', 'FontSize', 15)
-    ylabel('Front Left Camber Angle (degrees)', 'FontSize', 15)
+    xlabel('Front Left Steer (degrees)', 'FontSize', 12)
+    ylabel('Front Left Camber (degrees)', 'FontSize', 12)
     title('Camber vs. Steer', 'FontSize', 20)
-    xlim([params(2,abs(maxDroop)/increment+1,1),params(2,abs(maxDroop)/increment+1,size(params,3))])
+    xlim([params(2,midBump,size(params,3)),params(2,midBump,1)])
     subplot(2,3,6)
     surf(squeeze(params(1,:,:)), squeeze(params(2,:,:)), squeeze(params(3,:,:)))
-    xlabel('Front Left Bump (in)', 'FontSize', 15)
-    ylabel('Front Left Steer Angle (degrees)', 'FontSize', 15)
-    zlabel('Front Left Camber Angle (degrees)', 'FontSize', 15)
+    xlabel('Front Left Bump (in)', 'FontSize', 12)
+    ylabel('Front Left Steer (degrees)', 'FontSize', 12)
+    zlabel('Front Left Camber (degrees)', 'FontSize', 12)
     title('Camber vs. Steer vs. Bump', 'FontSize', 20)
-
-    % ylim([floor(params(3,abs(maxDroop)/increment+1,size(params,3))*10)/10,ceil(params(3,abs(maxDroop)/increment+1,1)*10)/10])
+    % ylim([floor(params(3,midBump,size(params,3))*10)/10,ceil(params(3,midBump,1)*10)/10])
 end
 
 function coords = solveSpheres(p1, p2, p3, v1, v2, v3, p0)
@@ -268,7 +269,7 @@ function [coordsNew, params, tire] = solveSteer(coordsOld, lengths, steer)
 
     coordsNew(1:2,:) = coordsOld(1:2,:);
     coordsNew(7,[1,3]) = coordsOld(7,[1,3]);
-    coordsNew(7,2) = coordsOld(7,2)-steer*25.4;
+    coordsNew(7,2) = coordsOld(7,2)+steer*25.4;
     coordsNew(3,:) = solveSpheres(coordsNew(1,:), coordsNew(2,:), coordsNew(7,:), lengths(6), lengths(7), lengths(4), coordsOld(3,:));
     coordsNew(4,:) = solveSpheres(coordsNew(1,:), coordsNew(2,:), coordsNew(3,:), lengths(8), lengths(9), lengths(10), coordsOld(4,:));
     coordsNew(5,:) = solveSpheres(coordsNew(1,:), coordsNew(2,:), coordsNew(3,:), lengths(11), lengths(12), lengths(13), coordsOld(5,:));  
